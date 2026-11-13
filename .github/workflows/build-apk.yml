@@ -1,0 +1,171 @@
+name: Build Debug APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Temurin Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Verify Java environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v java >/dev/null 2>&1; then
+            echo "ERROR: Java executable could not be detected on PATH."
+            exit 1
+          fi
+          java -version
+          echo "JAVA_HOME=${JAVA_HOME:-<not set>}"
+          JAVA_VER_RAW=$(java -version 2>&1 | head -n 1 | sed -E 's/.*version "([^"]+)".*/\1/')
+          if [ -z "$JAVA_VER_RAW" ]; then
+            echo "ERROR: Failed to parse active Java version."
+            exit 1
+          fi
+          if [[ "$JAVA_VER_RAW" == 1.* ]]; then
+            JAVA_MAJOR=$(echo "$JAVA_VER_RAW" | cut -d. -f2)
+          else
+            JAVA_MAJOR=$(echo "$JAVA_VER_RAW" | cut -d. -f1)
+          fi
+          if ! [[ "$JAVA_MAJOR" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: Could not determine numeric Java major version from '$JAVA_VER_RAW'."
+            exit 1
+          fi
+          echo "Detected Java major version: $JAVA_MAJOR"
+          if [ "$JAVA_MAJOR" -lt 17 ]; then
+            echo "ERROR: Java 17 or newer is required, but detected Java $JAVA_MAJOR."
+            exit 1
+          fi
+
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.3.1"
+
+      - name: Create temporary debug keystore
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYTOOL_BIN="${JAVA_HOME:+$JAVA_HOME/bin/}keytool"
+          if [ ! -x "$KEYTOOL_BIN" ]; then
+            KEYTOOL_BIN="$(command -v keytool || true)"
+          fi
+          if [ -z "$KEYTOOL_BIN" ]; then
+            echo "ERROR: keytool not found in configured Java installation."
+            exit 1
+          fi
+          if [ ! -f "./debug.keystore" ]; then
+            "$KEYTOOL_BIN" -genkeypair -noprompt \
+              -keystore ./debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US" >/dev/null 2>&1
+          fi
+          if [ ! -f "./debug.keystore" ] || [ ! -s "./debug.keystore" ]; then
+            echo "ERROR: Failed to verify temporary ./debug.keystore."
+            exit 1
+          fi
+          echo "Temporary debug keystore ready."
+
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Verify debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
+          if [ -f "$APK_PATH" ] && [ -s "$APK_PATH" ] && [[ "$APK_PATH" == *.apk ]]; then
+            echo "Verified debug APK at $APK_PATH"
+          else
+            echo "ERROR: Expected debug APK missing or empty at $APK_PATH"
+            if [ -d "app/build/outputs/apk" ]; then
+              echo "APK files discovered under app/build/outputs/apk:"
+              find app/build/outputs/apk -type f -name '*.apk' || true
+            else
+              echo "Directory app/build/outputs/apk does not exist."
+            fi
+            exit 1
+          fi
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Prepare APK release asset
+        id: prepare_asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEMP_DIR="$(mktemp -d)"
+          ASSET_PATH="$TEMP_DIR/app-debug.apk"
+          cp "app/build/outputs/apk/debug/app-debug.apk" "$ASSET_PATH"
+          echo "asset_path=$ASSET_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Publish APK to GitHub Releases
+        id: publish_release
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh --version
+          ASSET_PATH="${{ steps.prepare_asset.outputs.asset_path }}"
+          if [ ! -f "$ASSET_PATH" ] || [ ! -s "$ASSET_PATH" ]; then
+            echo "ERROR: Prepared APK missing or empty at $ASSET_PATH"
+            exit 1
+          fi
+          if [[ "$ASSET_PATH" != *.apk ]] || [ "$(basename "$ASSET_PATH")" != "app-debug.apk" ]; then
+            echo "ERROR: Release asset filename must be exactly app-debug.apk"
+            exit 1
+          fi
+          RELEASE_TAG="debug-apk-build-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          RELEASE_TITLE="Debug APK Build #${GITHUB_RUN_NUMBER}"
+          NOTES=$(printf '%s\n' \
+            "This is an automatically generated debug APK built by GitHub Actions." \
+            "" \
+            "- GitHub Actions Run Number: ${GITHUB_RUN_NUMBER}" \
+            "- GitHub Actions Run Attempt: ${GITHUB_RUN_ATTEMPT}" \
+            "- Source Commit SHA: ${GITHUB_SHA}" \
+            "" \
+            "Notice:" \
+            "- This APK is intended for testing only." \
+            "- This APK is not a Play Store production release." \
+            "- This APK is signed only with a temporary debug keystore.")
+          gh release create "$RELEASE_TAG" "$ASSET_PATH" \
+            --target "$GITHUB_SHA" \
+            --title "$RELEASE_TITLE" \
+            --latest \
+            --notes "$NOTES"
+
+      - name: Check release outcome
+        if: steps.publish_release.outcome != 'success'
+        shell: bash
+        run: |
+          echo "ERROR: GitHub Release publishing failed."
+          echo "The built debug APK was not removed, and the GitHub Actions artifact named 'app-debug-apk' remains available as a backup."
+          exit 1

@@ -1,0 +1,230 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOptString(data, key, maxLen) {
+      return !(key in data) || (data[key] is string && data[key].size() <= maxLen);
+    }
+
+    function isOptBool(data, key) {
+      return !(key in data) || data[key] is bool;
+    }
+
+    function isOptInt(data, key, minVal, maxVal) {
+      return !(key in data) || (data[key] is int && data[key] >= minVal && data[key] <= maxVal);
+    }
+
+    function isValidAgencyProfile(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.agencyName is string && data.agencyName.size() >= 1 && data.agencyName.size() <= 120 &&
+             data.ownerNames is string && data.ownerNames.size() <= 160 &&
+             data.contactNumbers is string && data.contactNumbers.size() <= 120 &&
+             data.agencyAddress is string && data.agencyAddress.size() <= 240 &&
+             isOptString(data, 'defaultOwnerSignatureBase64', 200000) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCustomerRecord(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.billNumber is string && data.billNumber.size() >= 1 && data.billNumber.size() <= 40 &&
+             isOptString(data, 'customerName', 120) &&
+             isOptBool(data, 'keepNameBlankOnBill') &&
+             isOptString(data, 'phoneNumber', 30) &&
+             isOptString(data, 'aadharNumber', 20) &&
+             isOptString(data, 'customerAddress', 240) &&
+             isOptString(data, 'vehicleNo', 60) &&
+             isOptString(data, 'vehicleModel', 80) &&
+             isOptString(data, 'purchaseDate', 40) &&
+             isOptBool(data, 'keepDateBlankOnBill') &&
+             isOptInt(data, 'totalPrice', 0, 10000000) &&
+             isOptBool(data, 'keepPriceBlankOnBill') &&
+             data.paymentMode is string && (data.paymentMode == 'cash' || data.paymentMode == 'finance') &&
+             isOptInt(data, 'downPayment', 0, 10000000) &&
+             isOptInt(data, 'financeAmount', 0, 10000000) &&
+             isOptInt(data, 'totalInstallments', 0, 120) &&
+             isOptInt(data, 'installmentAmount', 0, 1000000) &&
+             isOptString(data, 'purchasedFrom', 160) &&
+             isOptString(data, 'batteryGuarantee', 160) &&
+             isOptString(data, 'batteryWarranty', 160) &&
+             isOptString(data, 'otherWarranty', 400) &&
+             isOptString(data, 'notes', 500) &&
+             isOptBool(data, 'hasCustomerPhoto') &&
+             isOptBool(data, 'hasVehiclePhoto') &&
+             isOptBool(data, 'hasWarrantyPhoto') &&
+             isOptString(data, 'customerSignatureBase64', 200000) &&
+             isOptString(data, 'ownerSignatureBase64', 200000) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCustomerPhoto(data, userId, customerId, photoType) {
+      return data.userId is string && data.userId == userId &&
+             data.customerId is string && data.customerId == customerId &&
+             data.photoType is string && data.photoType == photoType &&
+             (data.photoType == 'customer' || data.photoType == 'vehicle' || data.photoType == 'warranty_card') &&
+             data.imageBase64 is string && data.imageBase64.size() >= 1 && data.imageBase64.size() <= 700000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidKistSlip(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             isOptString(data, 'customerId', 128) &&
+             data.slipNumber is string && data.slipNumber.size() >= 1 && data.slipNumber.size() <= 40 &&
+             isOptString(data, 'customerName', 120) &&
+             isOptBool(data, 'keepNameBlank') &&
+             isOptString(data, 'phoneNumber', 30) &&
+             isOptString(data, 'vehicleNo', 60) &&
+             isOptString(data, 'vehicleModel', 80) &&
+             isOptString(data, 'kistNumber', 30) &&
+             isOptInt(data, 'amountPaid', 0, 10000000) &&
+             isOptBool(data, 'keepAmountBlank') &&
+             isOptString(data, 'paymentDate', 40) &&
+             isOptBool(data, 'keepDateBlank') &&
+             isOptString(data, 'paymentMethod', 40) &&
+             isOptString(data, 'nextDueDate', 40) &&
+             isOptString(data, 'remarks', 300) &&
+             isOptString(data, 'customerSignatureBase64', 200000) &&
+             isOptString(data, 'ownerSignatureBase64', 200000) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    match /users/{userId}/agency_profiles/{profileId} {
+      allow get: if isOwner(userId) && isValidId(profileId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) &&
+                       isValidId(profileId) &&
+                       incoming().keys().hasAll(['userId', 'agencyName', 'ownerNames', 'contactNumbers', 'agencyAddress', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'agencyName', 'ownerNames', 'contactNumbers', 'agencyAddress', 'defaultOwnerSignatureBase64', 'createdAt', 'updatedAt']) &&
+                       isValidAgencyProfile(incoming(), userId);
+      allow update: if isOwner(userId) &&
+                       isValidId(profileId) &&
+                       isValidAgencyProfile(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'agencyName', 'ownerNames', 'contactNumbers', 'agencyAddress',
+                         'defaultOwnerSignatureBase64', 'updatedAt'
+                       ]);
+      allow delete: if isOwner(userId) && isValidId(profileId);
+    }
+
+    match /users/{userId}/customers/{customerId} {
+      allow get: if isOwner(userId) && isValidId(customerId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) &&
+                       isValidId(customerId) &&
+                       incoming().keys().hasAll(['userId', 'billNumber', 'paymentMode', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'billNumber', 'customerName', 'keepNameBlankOnBill',
+                         'phoneNumber', 'aadharNumber', 'customerAddress',
+                         'vehicleNo', 'vehicleModel', 'purchaseDate', 'keepDateBlankOnBill',
+                         'totalPrice', 'keepPriceBlankOnBill', 'paymentMode',
+                         'downPayment', 'financeAmount', 'totalInstallments', 'installmentAmount',
+                         'purchasedFrom', 'batteryGuarantee', 'batteryWarranty', 'otherWarranty',
+                         'notes', 'hasCustomerPhoto', 'hasVehiclePhoto', 'hasWarrantyPhoto',
+                         'customerSignatureBase64', 'ownerSignatureBase64',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidCustomerRecord(incoming(), userId);
+      allow update: if isOwner(userId) &&
+                       isValidId(customerId) &&
+                       isValidCustomerRecord(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'billNumber', 'customerName', 'keepNameBlankOnBill',
+                         'phoneNumber', 'aadharNumber', 'customerAddress',
+                         'vehicleNo', 'vehicleModel', 'purchaseDate', 'keepDateBlankOnBill',
+                         'totalPrice', 'keepPriceBlankOnBill', 'paymentMode',
+                         'downPayment', 'financeAmount', 'totalInstallments', 'installmentAmount',
+                         'purchasedFrom', 'batteryGuarantee', 'batteryWarranty', 'otherWarranty',
+                         'notes', 'hasCustomerPhoto', 'hasVehiclePhoto', 'hasWarrantyPhoto',
+                         'customerSignatureBase64', 'ownerSignatureBase64',
+                         'updatedAt'
+                       ]);
+      allow delete: if isOwner(userId) && isValidId(customerId);
+
+      match /photos/{photoType} {
+        allow get: if isOwner(userId) && isValidId(customerId) && isValidId(photoType);
+        allow list: if isOwner(userId) && isValidId(customerId);
+        allow create: if isOwner(userId) &&
+                         isValidId(customerId) &&
+                         isValidId(photoType) &&
+                         exists(/databases/$(database)/documents/users/$(userId)/customers/$(customerId)) &&
+                         incoming().keys().hasAll(['userId', 'customerId', 'photoType', 'imageBase64', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'customerId', 'photoType', 'imageBase64', 'createdAt', 'updatedAt']) &&
+                         isValidCustomerPhoto(incoming(), userId, customerId, photoType);
+        allow update: if isOwner(userId) &&
+                         isValidId(customerId) &&
+                         isValidId(photoType) &&
+                         isValidCustomerPhoto(incoming(), userId, customerId, photoType) &&
+                         incoming().userId == existing().userId &&
+                         incoming().customerId == existing().customerId &&
+                         incoming().photoType == existing().photoType &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['imageBase64', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(customerId) && isValidId(photoType);
+      }
+    }
+
+    match /users/{userId}/kist_slips/{slipId} {
+      allow get: if isOwner(userId) && isValidId(slipId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) &&
+                       isValidId(slipId) &&
+                       incoming().keys().hasAll(['userId', 'slipNumber', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'customerId', 'slipNumber', 'customerName', 'keepNameBlank',
+                         'phoneNumber', 'vehicleNo', 'vehicleModel', 'kistNumber',
+                         'amountPaid', 'keepAmountBlank', 'paymentDate', 'keepDateBlank',
+                         'paymentMethod', 'nextDueDate', 'remarks',
+                         'customerSignatureBase64', 'ownerSignatureBase64',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidKistSlip(incoming(), userId);
+      allow update: if isOwner(userId) &&
+                       isValidId(slipId) &&
+                       isValidKistSlip(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'customerId', 'slipNumber', 'customerName', 'keepNameBlank',
+                         'phoneNumber', 'vehicleNo', 'vehicleModel', 'kistNumber',
+                         'amountPaid', 'keepAmountBlank', 'paymentDate', 'keepDateBlank',
+                         'paymentMethod', 'nextDueDate', 'remarks',
+                         'customerSignatureBase64', 'ownerSignatureBase64',
+                         'updatedAt'
+                       ]);
+      allow delete: if isOwner(userId) && isValidId(slipId);
+    }
+  }
+}

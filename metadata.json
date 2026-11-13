@@ -1,0 +1,6 @@
+{
+  "name": "Husaini E-Rickshaw",
+  "description": "E-Rickshaw agency billing, customer records, temporary installment slips, warranty tracking, signatures, and multi-device cloud sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

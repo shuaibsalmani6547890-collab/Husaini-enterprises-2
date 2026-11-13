@@ -1,0 +1,118 @@
+{
+  "entities": {
+    "AgencyProfile": {
+      "title": "AgencyProfile",
+      "description": "Editable agency branding, owner details, and default owner signature.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "agencyName": { "type": "string", "description": "Name of the e-rickshaw agency." },
+        "ownerNames": { "type": "string", "description": "Owner names shown on bills and slips." },
+        "contactNumbers": { "type": "string", "description": "Agency contact phone numbers." },
+        "agencyAddress": { "type": "string", "description": "Agency showroom location or branch address." },
+        "defaultOwnerSignatureBase64": { "type": "string", "description": "Optional default owner signature PNG encoded in Base64." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server creation timestamp." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server update timestamp." }
+      },
+      "required": ["userId", "agencyName", "ownerNames", "contactNumbers", "agencyAddress", "createdAt", "updatedAt"]
+    },
+    "CustomerRecord": {
+      "title": "CustomerRecord",
+      "description": "E-rickshaw customer, vehicle, finance/cash, warranty, and signature record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "billNumber": { "type": "string", "description": "Generated bill reference number." },
+        "customerName": { "type": "string", "description": "Customer full name (may be empty if kept blank)." },
+        "keepNameBlankOnBill": { "type": "boolean", "description": "Whether to print a blank line for customer name on the bill." },
+        "phoneNumber": { "type": "string", "description": "Customer mobile number." },
+        "aadharNumber": { "type": "string", "description": "Customer 12-digit Aadhar number." },
+        "customerAddress": { "type": "string", "description": "Customer residential address." },
+        "vehicleNo": { "type": "string", "description": "Vehicle registration, chassis, or frame number." },
+        "vehicleModel": { "type": "string", "description": "E-rickshaw model name." },
+        "purchaseDate": { "type": "string", "description": "Purchase date string (may be empty if kept blank)." },
+        "keepDateBlankOnBill": { "type": "boolean", "description": "Whether to keep date column blank on the bill." },
+        "totalPrice": { "type": "integer", "description": "Total e-rickshaw price in INR (0 if kept blank)." },
+        "keepPriceBlankOnBill": { "type": "boolean", "description": "Whether to keep price column blank on the bill." },
+        "paymentMode": { "type": "string", "enum": ["cash", "finance"], "description": "Purchase payment mode." },
+        "downPayment": { "type": "integer", "description": "Cash down payment in INR." },
+        "financeAmount": { "type": "integer", "description": "Financed principal amount in INR." },
+        "totalInstallments": { "type": "integer", "description": "Number of EMI installments (kist)." },
+        "installmentAmount": { "type": "integer", "description": "Monthly installment amount in INR." },
+        "purchasedFrom": { "type": "string", "description": "Showroom, branch, or financier name." },
+        "batteryGuarantee": { "type": "string", "description": "Battery guarantee period or details." },
+        "batteryWarranty": { "type": "string", "description": "Battery warranty period or details." },
+        "otherWarranty": { "type": "string", "description": "Motor, controller, charger, and other parts guarantee/warranty." },
+        "notes": { "type": "string", "description": "Additional bill or vehicle notes." },
+        "hasCustomerPhoto": { "type": "boolean", "description": "True when customer photo attachment exists." },
+        "hasVehiclePhoto": { "type": "boolean", "description": "True when e-rickshaw photo attachment exists." },
+        "hasWarrantyPhoto": { "type": "boolean", "description": "True when warranty card photo attachment exists." },
+        "customerSignatureBase64": { "type": "string", "description": "Customer signature PNG encoded in Base64." },
+        "ownerSignatureBase64": { "type": "string", "description": "Agency owner signature PNG encoded in Base64." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server creation timestamp." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server update timestamp." }
+      },
+      "required": ["userId", "billNumber", "paymentMode", "createdAt", "updatedAt"]
+    },
+    "CustomerPhoto": {
+      "title": "CustomerPhoto",
+      "description": "Compressed photo attachment for a customer record (customer, vehicle, or warranty card).",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "customerId": { "type": "string", "description": "Parent customer document ID." },
+        "photoType": { "type": "string", "enum": ["customer", "vehicle", "warranty_card"], "description": "Attachment category." },
+        "imageBase64": { "type": "string", "description": "Compressed JPEG image encoded in Base64." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server creation timestamp." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server update timestamp." }
+      },
+      "required": ["userId", "customerId", "photoType", "imageBase64", "createdAt", "updatedAt"]
+    },
+    "KistSlip": {
+      "title": "KistSlip",
+      "description": "Temporary installment (kist) payment receipt slip.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "customerId": { "type": "string", "description": "Optional linked customer document ID." },
+        "slipNumber": { "type": "string", "description": "Temporary slip number." },
+        "customerName": { "type": "string", "description": "Customer name (may be blank)." },
+        "keepNameBlank": { "type": "boolean", "description": "Whether to print blank name line on slip." },
+        "phoneNumber": { "type": "string", "description": "Customer phone number." },
+        "vehicleNo": { "type": "string", "description": "Vehicle registration or chassis number." },
+        "vehicleModel": { "type": "string", "description": "E-rickshaw model name." },
+        "kistNumber": { "type": "string", "description": "Installment index label (e.g. 3/18)." },
+        "amountPaid": { "type": "integer", "description": "Paid installment amount in INR." },
+        "keepAmountBlank": { "type": "boolean", "description": "Whether to print blank price/amount column on slip." },
+        "paymentDate": { "type": "string", "description": "Date of kist payment." },
+        "keepDateBlank": { "type": "boolean", "description": "Whether to print blank date column on slip." },
+        "paymentMethod": { "type": "string", "description": "Cash, UPI, or Bank Transfer." },
+        "nextDueDate": { "type": "string", "description": "Next installment due date." },
+        "remarks": { "type": "string", "description": "Notes on temporary kist slip." },
+        "customerSignatureBase64": { "type": "string", "description": "Customer signature PNG encoded in Base64." },
+        "ownerSignatureBase64": { "type": "string", "description": "Agency owner signature PNG encoded in Base64." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server creation timestamp." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server update timestamp." }
+      },
+      "required": ["userId", "slipNumber", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/agency_profiles/{profileId}": {
+      "schema": "#/entities/AgencyProfile",
+      "description": "User's editable agency profile and default owner signature."
+    },
+    "/users/{userId}/customers/{customerId}": {
+      "schema": "#/entities/CustomerRecord",
+      "description": "User's e-rickshaw customer billing and warranty records."
+    },
+    "/users/{userId}/customers/{customerId}/photos/{photoType}": {
+      "schema": "#/entities/CustomerPhoto",
+      "description": "Customer, e-rickshaw, and warranty card photo attachments."
+    },
+    "/users/{userId}/kist_slips/{slipId}": {
+      "schema": "#/entities/KistSlip",
+      "description": "Temporary installment (kist) slips."
+    }
+  }
+}
